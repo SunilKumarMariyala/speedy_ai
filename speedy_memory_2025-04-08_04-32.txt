@@ -1,0 +1,6 @@
+[2025-04-08 04:32:11] You: -
+Speedy: Hi Sunil, I am your personal assistant SPEEDY. What can I do for you?
+
+[2025-04-08 04:32:57] You: tell who is owner name in one word
+Speedy: You said: tell who is owner name in one word. How else can I help you, Sunil?
+
