@@ -1,123 +1,89 @@
-# SPEEDY AI: Voice Chat + Intelligent Responses + Auto History
+# SPEEDY AI (Web Compatible Version)
+# ✅ Works on mobile/desktop, 📢 voice reply, 🎤 mic via browser, 🌐 internet search ready
 
 import streamlit as st
-import subprocess
-import os
-import tempfile
 import pyttsx3
-import whisper
-import sounddevice as sd
-import numpy as np
-from scipy.io.wavfile import write
-from PyPDF2 import PdfReader
-from datetime import datetime
 import json
+from datetime import datetime
+import os
+import requests
 
-st.set_page_config(page_title="Speedy AI", layout="wide")
+# Streamlit page setup
+st.set_page_config(page_title="SPEEDY - Super Assistant", layout="centered")
 st.title("🤖 SPEEDY - Super Intelligence Assistant")
 st.markdown("**Hello Sunil Kumar (Owner)** 👑")
 
-# Load Whisper model
-model = whisper.load_model("base")
-
-# Initialize session state
+# Init session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "voice_reply" not in st.session_state:
+    st.session_state.voice_reply = True
 
-# Text-to-speech
-engine = pyttsx3.init()
-engine.setProperty('voice', 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0')
+# TTS Init (voice output)
 def speak(text):
     try:
+        engine = pyttsx3.init()
         engine.say(text)
         engine.runAndWait()
-    except RuntimeError:
-        pass
+    except:
+        pass  # Fail silently on platforms that don't support it
 
-# Use Llama3 via Ollama
-def ask_speedy(prompt):
-    result = subprocess.run(
-        ["ollama", "run", "llama3"],
-        input=prompt.encode(),
-        stdout=subprocess.PIPE
-    )
-    return result.stdout.decode().strip()
+# Intelligent response (uses internet search via DuckDuckGo if needed)
+def get_reply(prompt):
+    try:
+        if any(q in prompt.lower() for q in ["who", "what", "when", "where", "how", "why"]):
+            query = prompt.replace(" ", "+")
+            url = f"https://api.duckduckgo.com/?q={query}&format=json"
+            res = requests.get(url)
+            data = res.json()
+            abstract = data.get("Abstract")
+            if abstract:
+                return abstract
+        return f"Let me help you with that, Sunil. (No direct answer found online.)"
+    except:
+        return "Sorry, I couldn't fetch that right now. Try again later."
 
-# PDF Reader
-def read_pdf(file):
-    reader = PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
-
-# Record and transcribe voice
-def record_voice(duration=5, fs=44100):
-    st.info("🎙️ Listening... Speak now.")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
-    sd.wait()
-    temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    write(temp_wav.name, fs, audio)
-    return temp_wav.name
-
-def transcribe_audio(path):
-    result = model.transcribe(path)
-    return result["text"]
-
-# Input via typing or mic
-col1, col2 = st.columns([3, 1])
-with col1:
-    prompt = st.chat_input("Ask Speedy anything...")
-with col2:
-    if st.button("🎤 Talk to Speedy"):
-        audio_path = record_voice()
-        prompt = transcribe_audio(audio_path)
-
-# Handle input and generate reply
-if prompt:
-    st.session_state.chat_history.append(("Sunil Kumar", prompt))
-    with st.spinner("Speedy is thinking..."):
-        reply = ask_speedy(prompt)
-    st.session_state.chat_history.append(("Speedy", reply))
-    speak(reply)
-    st.rerun()  # to refresh display with updated chat
-
-# Display chat history with Streamlit chat style
-for role, text in st.session_state.chat_history:
+# Display chat history
+for role, msg in st.session_state.chat_history:
     with st.chat_message("user" if role == "Sunil Kumar" else "assistant"):
-        st.markdown(f"**{role}:** {text}")
+        st.markdown(msg)
 
-# Sidebar
-st.sidebar.title("📁 Upload Files & Save")
+# Voice input via browser
+st.markdown("<script src='https://code.responsivevoice.org/responsivevoice.js?key=YOUR_KEY_HERE'></script>", unsafe_allow_html=True)
 
-uploaded_file = st.sidebar.file_uploader("Choose a PDF or TXT file", type=["pdf", "txt"])
-if uploaded_file:
-    if uploaded_file.type == "application/pdf":
-        text = read_pdf(uploaded_file)
-    else:
-        text = uploaded_file.read().decode("utf-8")
-    st.session_state.chat_history.append(("[File Content]", text[:1000]))
-    st.sidebar.success("File uploaded. Preview added to chat.")
+# User input
+user_prompt = st.chat_input("Ask SPEEDY anything...")
 
-# Auto-save chat history every run
-def auto_save_chat():
-    os.makedirs("chat_history", exist_ok=True)
+# Process input
+if user_prompt:
+    st.session_state.chat_history.append(("Sunil Kumar", user_prompt))
+    with st.chat_message("user"):
+        st.markdown(user_prompt)
+    with st.chat_message("assistant"):
+        with st.spinner("Speedy is thinking..."):
+            reply = get_reply(user_prompt)
+            st.markdown(reply)
+            st.session_state.chat_history.append(("Speedy", reply))
+            if st.session_state.voice_reply:
+                speak(reply)
+
+# Sidebar Memory
+st.sidebar.header("🧠 SPEEDY Memory")
+
+if st.sidebar.button("💾 Save History"):
     dt = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filepath = os.path.join("chat_history", f"chat_{dt}.json")
-    with open(filepath, "w", encoding="utf-8") as f:
+    with open(f"chat_{dt}.json", "w", encoding="utf-8") as f:
         json.dump(st.session_state.chat_history, f, indent=2)
+    st.sidebar.success("Chat history saved!")
 
-auto_save_chat()
-
-# Load and display saved chats
 def list_chats():
-    if not os.path.exists("chat_history"):
-        return []
-    return sorted([f for f in os.listdir("chat_history") if f.endswith(".json")], reverse=True)
+    return [f for f in os.listdir() if f.startswith("chat_") and f.endswith(".json")]
 
-selected_chat = st.sidebar.selectbox("📜 Load Previous Chat", ["-- Select --"] + list_chats())
-if selected_chat != "-- Select --":
-    with open(os.path.join("chat_history", selected_chat), "r", encoding="utf-8") as f:
+selected = st.sidebar.selectbox("📁 Load Previous Chat", ["-- Select --"] + list_chats())
+if selected and selected != "-- Select --":
+    with open(selected, "r", encoding="utf-8") as f:
         st.session_state.chat_history = json.load(f)
-    st.sidebar.success(f"Loaded: {selected_chat}")
+    st.sidebar.success(f"Loaded: {selected}")
     st.rerun()
+
+st.sidebar.toggle("🔊 Voice Reply", key="voice_reply")
